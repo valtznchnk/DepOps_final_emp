@@ -1,0 +1,73 @@
+---
+- name: Configure Deploy
+  hosts: cert_emp_deploy
+  become: yes
+
+  tasks:
+    - name: Apt update
+      apt:
+        update_cache: yes
+
+    - name: Ensure maven package is present
+      apt:
+        name: maven
+        state: present
+
+    - name: Ensure git package is present
+      apt:
+        name: git
+        state: present
+
+    - name: Create workdir
+      command: "mkdir /home/ubuntu/my_app"
+
+    - name: Example clone repository
+      git:
+        repo: https://github.com/vinayakrj/java-war-project.git
+        dest: /home/ubuntu/my_app
+
+    - name: Move workdir
+      become: yes
+      shell: "cd /home/ubuntu/my_app && mvn package"
+
+    - name: Copy war-file in master
+      fetch:
+        src: /home/ubuntu/my_app/target/my-app.war
+        dest: /tmp/
+        flat: yes
+
+- name: Configure Prod
+  hosts: cert_emp_prod
+  become: yes
+
+  tasks:
+    - name: Apt update
+      apt:
+        update_cache: yes
+
+    - name: Install apache tomcat
+      become: yes
+      shell: |
+        apt install openjdk-11-jdk -y
+        cd /opt
+        wget https://downloads.apache.org/tomcat/tomcat-9/v9.0.93/bin/apache-tomcat-9.0.93.tar.gz
+        tar xvf apache-tomcat-9.0.93.tar.gz
+        mv apache-tomcat-9.0.93 tomcat
+        chown -R $USER:$USER /opt/tomcat
+        /opt/tomcat/bin/startup.sh
+
+    - name: Ensure maven package is present
+      apt:
+        name: maven
+        state: present
+
+    - name: Copy my-app.war
+      copy:
+        src: /tmp/my-app.war
+        dest: /opt/tomcat/webapps/
+
+    - name: Restart apache tomcat
+      become: yes
+      shell: |
+        /opt/tomcat/bin/shutdown.sh
+        /opt/tomcat/bin/startup.sh
